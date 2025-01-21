@@ -1,0 +1,90 @@
+<?xml version="1.0" encoding="UTF-8"?>
+
+<mule xmlns:salesforce="http://www.mulesoft.org/schema/mule/salesforce" xmlns:ee="http://www.mulesoft.org/schema/mule/ee/core"
+	xmlns:sftp="http://www.mulesoft.org/schema/mule/sftp"
+	xmlns:http="http://www.mulesoft.org/schema/mule/http" xmlns="http://www.mulesoft.org/schema/mule/core" xmlns:doc="http://www.mulesoft.org/schema/mule/documentation" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://www.mulesoft.org/schema/mule/core http://www.mulesoft.org/schema/mule/core/current/mule.xsd
+http://www.mulesoft.org/schema/mule/http http://www.mulesoft.org/schema/mule/http/current/mule-http.xsd
+http://www.mulesoft.org/schema/mule/sftp http://www.mulesoft.org/schema/mule/sftp/current/mule-sftp.xsd
+http://www.mulesoft.org/schema/mule/ee/core http://www.mulesoft.org/schema/mule/ee/core/current/mule-ee.xsd
+http://www.mulesoft.org/schema/mule/salesforce http://www.mulesoft.org/schema/mule/salesforce/current/mule-salesforce.xsd">
+	<configuration-properties doc:name="Configuration properties" doc:id="851fdda9-8173-4ce8-b04a-18a7cc7c22a1" file="credentials.properties" />
+	<sftp:config name="SFTP_Config" doc:name="SFTP Config" doc:id="c105a807-d842-419d-963d-b68dab80792f" >
+		<sftp:connection workingDir="/upload" host="${sftp.host}" port="${sftp.port}" username="${sftp.username}" password="${sftp.password}" />
+	</sftp:config>
+	<http:listener-config name="HTTP_Listener_config" doc:name="HTTP Listener config" doc:id="47df71c1-3f23-4eff-932b-c8452749cbda" >
+		<http:listener-connection host="0.0.0.0" port="8081" />
+	</http:listener-config>
+	<salesforce:sfdc-config name="Salesforce_Config_Charles" doc:name="Salesforce Config" doc:id="cd7a8723-04b2-4a3f-a918-452b90a97714" >
+		<salesforce:basic-connection username="${sfdc.usernameCharles}" password="${sfdc.passwordCharles}" />
+	</salesforce:sfdc-config>
+	<salesforce:sfdc-config name="Salesforce_Config_Manufacturing" doc:name="Salesforce Config" doc:id="cd74b109-f458-4861-8edc-1cad2fd8a4e5" >
+		<salesforce:basic-connection username="${sfdc.usernameManufacturing}" password="${sfdc.passwordManufacturing}" />
+	</salesforce:sfdc-config>
+	<flow name="Flow" doc:id="88bfe34b-714f-47e5-87a1-f3c6954c2d80" >
+		<http:listener doc:name="/test" doc:id="beb0650b-84ad-4605-837e-8bb3cdf83c8c" config-ref="HTTP_Listener_config" path="/test"/>
+		<sftp:read doc:name="Read" doc:id="10979b49-4e69-4436-9ca5-d9ab787f27c1" config-ref="SFTP_Config" path="ProjectSample.xlsx" outputMimeType="application/xlsx"/>
+		<ee:transform doc:name="Transform Excel Content to JSON" doc:id="8f97d9c5-7a91-42d4-ab1d-c1c25b49811e">
+			<ee:message>
+				<ee:set-payload><![CDATA[%dw 2.0
+output application/xlsx
+
+---
+payload]]></ee:set-payload>
+			</ee:message>
+		</ee:transform>
+		<ee:transform doc:name="Filter Items" doc:id="6109a770-e732-42a4-9276-de5ba9cd5b8a" >
+			<ee:message >
+				<ee:set-payload ><![CDATA[%dw 2.0
+output application/json
+---
+//filterObject(payload, (value, key, index) ->
+//	key startsWith "ITEM"
+//)
+payload filterObject (($$) startsWith "ITEM")]]></ee:set-payload>
+			</ee:message>
+		</ee:transform>
+		<set-variable value='#[payload]' doc:name="Set Variable" doc:id="dbc42fc0-d74d-4d33-aa34-403f1483fa07" variableName="itemsJson"/>
+		<foreach doc:name="For Each" doc:id="876c60a4-ef7e-44f4-8f67-ed20395ad037" collection="#[keysOf(vars.itemsJson)]">
+			<ee:transform doc:name="Transform Message" doc:id="70da74c9-8559-423a-89a0-a1237252f6bb" >
+				<ee:message >
+					<ee:set-payload ><![CDATA[%dw 2.0
+output application/json
+var item = vars.itemsJson[payload]
+---
+{
+	'ClientName': item[0][2],
+	'ItemNumber': item[1][12],
+	'ItemDescription': item[6][2],
+	'TotalHOurs': item[47][4],
+	'TargetPriceB': item[74][10]
+}]]></ee:set-payload>
+				</ee:message>
+			</ee:transform>
+			<logger level="INFO" doc:name="Logger" doc:id="e971ad6f-e495-4959-9b23-059e61d8a96d" message="#[payload]"/>
+			<ee:transform doc:name="Transform Message" doc:id="7ee59174-d91d-40f5-a285-629e9f93d60b" >
+				<ee:message >
+					<ee:set-payload ><![CDATA[%dw 2.0
+output application/java
+---
+[{
+	SBQQ__Account__c: "001Hp00003RXqDaIAL",
+	SBQQ__Opportunity2__c: "006Hp000019FvyHIAS",
+	Excel_Item_Description__c: payload.ItemDescription as String,
+	Excel_Total_Hours__c: payload.TotalHOurs as String,
+	Excel_Target_Price_B__c: payload.TargetPriceB as String,
+}]]]></ee:set-payload>
+				</ee:message>
+			</ee:transform>
+			<salesforce:create doc:name="Create" doc:id="086a4859-a2b9-481c-87be-5d56464d47e5" config-ref="Salesforce_Config_Manufacturing" type="SBQQ__Quote__c"/>
+			<ee:transform doc:name="Transform Message" doc:id="d97d7b54-cd28-4dad-929a-dfda03db9f86" >
+				<ee:message >
+					<ee:set-payload ><![CDATA[%dw 2.0
+output application/json
+---
+payload
+]]></ee:set-payload>
+				</ee:message>
+			</ee:transform>
+		</foreach>
+	</flow>
+</mule>

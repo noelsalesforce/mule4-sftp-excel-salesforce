@@ -1,0 +1,39 @@
+<?xml version='1.0' encoding='UTF-8'?>
+<types:mule xmlns:types="http://www.mulesoft.org/schema/mule/types">
+  <types:catalog>
+    <types:type name="entireFileJson" format="excel">
+      <types:shape format="weave"><![CDATA[%dw 2.0
+
+type entireFileJson = {| Sheet1?: Array<{|  |}> |}
+
+]]></types:shape>
+    </types:type>
+    <types:type name="excel" format="excel">
+      <types:shape format="weave"><![CDATA[%dw 2.0
+
+type excel = {|
+  DATABASE?: Array<{|  |}>, 
+  MATERIAL?: Array<{|  |}>, 
+  SUMMARY?: Array<{|  |}>, 
+  "ITEM 1"?: Array<{|  |}>, 
+  "ITEM 2"?: Array<{|  |}>, 
+  "ITEM 3"?: Array<{|  |}>, 
+  "ITEM 4"?: Array<{|  |}>, 
+  "ITEM 5"?: Array<{|  |}>, 
+  "ITEM 6"?: Array<{|  |}>, 
+  END?: Array<{|  |}>
+|}
+
+]]></types:shape>
+    </types:type>
+  </types:catalog>
+  <types:enrichment select="#8f97d9c5-7a91-42d4-ab1d-c1c25b49811e">
+    <types:processor-declaration>
+      <types:output-event>
+        <types:message>
+          <types:payload type="excel"/>
+        </types:message>
+      </types:output-event>
+    </types:processor-declaration>
+  </types:enrichment>
+</types:mule>
